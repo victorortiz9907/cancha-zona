@@ -302,7 +302,15 @@ const AdminPanel = ({ onBack }) => {
 /* ============ MAIN APP ============ */
 export default function App() {
   const [dark, setDark] = useState(false);
-  const [page, setPage] = useState(window.location.pathname === "/admin" ? "admin" : "home");
+  const [page, setPage] = useState(window.location.pathname.includes("/admin") ? "admin" : "home");
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setPage(window.location.pathname.includes("/admin") ? "admin" : "home");
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [canchas, setCanchas] = useState([]);
@@ -465,24 +473,37 @@ export default function App() {
       const ext = profileForm.fotoFile.name.split('.').pop();
       const path = `avatars/${user.id}-${Date.now()}.${ext}`;
       const { error } = await supabase.storage.from("fotos").upload(path, profileForm.fotoFile, { upsert: true });
-      if (!error) { const { data: urlData } = supabase.storage.from("fotos").getPublicUrl(path); fotoUrl = urlData.publicUrl; }
+      if (!error) {
+        const { data: urlData } = supabase.storage.from("fotos").getPublicUrl(path);
+        fotoUrl = urlData.publicUrl + "?t=" + Date.now();
+      }
     }
     if (profileForm.email && profileForm.email !== user.email) {
       await supabase.auth.updateUser({ email: profileForm.email });
     }
-    await supabase.from("profiles").update({ foto_url: fotoUrl }).eq("id", user.id);
-    setProfile(prev => ({ ...prev, foto_url: fotoUrl }));
+    const { error: updateErr } = await supabase.from("profiles").update({ foto_url: fotoUrl }).eq("id", user.id);
+    if (!updateErr) {
+      const newProfile = { ...profile, foto_url: fotoUrl };
+      setProfile(newProfile);
+      setProfiles(prev => prev.map(p => p.id === user.id ? newProfile : p));
+    }
     setShowProfile(false); setToast({ message: "Perfil actualizado", type: "success" });
   };
 
   const handleDeleteAccount = async () => {
     if (!user) return;
     if (!window.confirm("¿Estás seguro? Esta acción es permanente y no se puede deshacer.")) return;
-    await supabase.from("reviews").delete().eq("user_id", user.id);
-    await supabase.from("comentarios").delete().eq("user_id", user.id);
-    await supabase.from("profiles").delete().eq("id", user.id);
+    const userId = user.id;
+    try {
+      await supabase.from("comentarios").delete().eq("user_id", userId);
+      await supabase.from("reviews").delete().eq("user_id", userId);
+      await supabase.from("sugerencias").delete().eq("user_id", userId);
+      await supabase.from("profiles").delete().eq("id", userId);
+    } catch (e) { /* continue even if some deletes fail due to RLS */ }
     await supabase.auth.signOut();
     setUser(null); setProfile(null); setShowProfile(false);
+    setReviews(prev => prev.filter(r => r.user_id !== userId));
+    setProfiles(prev => prev.filter(p => p.id !== userId));
     setToast({ message: "Cuenta eliminada", type: "success" });
   };
 
@@ -549,7 +570,7 @@ export default function App() {
     {/* HERO */}
     <section style={{ background: dark ? "linear-gradient(180deg, #0F172A 0%, #064E3B 100%)" : "linear-gradient(180deg, #ECFDF5 0%, #D1FAE5 100%)", padding: "48px 20px 40px", textAlign: "center" }}>
       <h1 style={{ fontSize: 32, fontWeight: 800, margin: "0 0 8px", color: "var(--cz-text)", letterSpacing: -0.5 }}>Encuentra tu cancha ideal</h1>
-      <p style={{ fontSize: 16, color: "var(--cz-text-secondary)", margin: "0 0 28px" }}>El directorio de canchas en Monterrey y su zona metropolitana</p>
+      <p style={{ fontSize: 16, color: "var(--cz-text-secondary)", margin: "0 0 28px" }}>El directorio #1 de canchas de fútbol en Monterrey y su zona metropolitana</p>
       <div style={{ maxWidth: 800, margin: "0 auto", display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
         <div style={{ flex: "1 1 280px", position: "relative", maxWidth: 400 }}>
           <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--cz-text-tertiary)" }}><SearchIcon /></div>
