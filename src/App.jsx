@@ -172,19 +172,21 @@ const AdminPanel = ({ onBack }) => {
   const [reviews, setReviews] = useState([]);
   const [canchas, setCanchas] = useState([]);
   const [profiles, setProfiles] = useState([]);
+  const [mensajes, setMensajes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedPhotos, setSelectedPhotos] = useState({});
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
     async function load() {
-      const [s, r, c, p] = await Promise.all([
+      const [s, r, c, p, m] = await Promise.all([
         supabase.from("sugerencias").select("*").order("created_at", { ascending: false }),
         supabase.from("reviews").select("*"),
         supabase.from("canchas").select("*"),
         supabase.from("profiles").select("*"),
+        supabase.from("comentarios").select("*").order("created_at", { ascending: false }),
       ]);
-      setSugerencias(s.data || []); setReviews(r.data || []); setCanchas(c.data || []); setProfiles(p.data || []); setLoading(false);
+      setSugerencias(s.data || []); setReviews(r.data || []); setCanchas(c.data || []); setProfiles(p.data || []); setMensajes(m.data || []); setLoading(false);
     }
     load();
   }, []);
@@ -230,7 +232,7 @@ const AdminPanel = ({ onBack }) => {
   return (<div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 16px" }}>
     <h1 style={{ fontSize: 24, fontWeight: 700, margin: "0 0 24px", color: "var(--cz-text)" }}>Panel de administración</h1>
     <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
-      {["sugerencias", "reviews"].map(t => (<button key={t} onClick={() => setTab(t)} style={{ padding: "8px 20px", borderRadius: 8, fontSize: 14, fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "inherit", background: tab === t ? "#10B981" : "var(--cz-bg-secondary)", color: tab === t ? "#fff" : "var(--cz-text-secondary)" }}>{t === "sugerencias" ? "Sugerencias" : "Moderación de estrellas"}</button>))}
+      {["sugerencias", "reviews", "buzon"].map(t => (<button key={t} onClick={() => setTab(t)} style={{ padding: "8px 20px", borderRadius: 8, fontSize: 14, fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "inherit", background: tab === t ? "#10B981" : "var(--cz-bg-secondary)", color: tab === t ? "#fff" : "var(--cz-text-secondary)" }}>{t === "sugerencias" ? "Sugerencias" : t === "reviews" ? "Moderación de estrellas" : "Buzón de mensajes"}</button>))}
     </div>
     {tab === "sugerencias" && (<div>
       {sugerencias.length === 0 && <p style={{ color: "var(--cz-text-tertiary)", textAlign: "center", padding: 40 }}>No hay sugerencias</p>}
@@ -274,6 +276,25 @@ const AdminPanel = ({ onBack }) => {
         </div>);
       })}
     </div>)}
+    {tab === "buzon" && (<div>
+      <p style={{ fontSize: 14, color: "var(--cz-text-secondary)", marginBottom: 16 }}>Mensajes enviados por los usuarios desde "Contáctanos"</p>
+      {mensajes.length === 0 && <p style={{ color: "var(--cz-text-tertiary)", textAlign: "center", padding: 40 }}>No hay mensajes</p>}
+      {mensajes.map(m => {
+        const pr = profiles.find(p => p.id === m.user_id);
+        return (<div key={m.id} style={{ background: "var(--cz-bg)", border: "1px solid var(--cz-border)", borderRadius: 10, padding: 16, marginBottom: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#10B981", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12, fontWeight: 600 }}>
+                {pr ? (pr.nombre[0] + pr.apellido[0]).toUpperCase() : "?"}
+              </div>
+              <span style={{ fontSize: 14, fontWeight: 600, color: "var(--cz-text)" }}>{pr ? `${pr.nombre} ${pr.apellido}` : "Usuario"}</span>
+            </div>
+            <span style={{ fontSize: 12, color: "var(--cz-text-tertiary)" }}>{m.created_at ? new Date(m.created_at).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}</span>
+          </div>
+          <p style={{ fontSize: 14, color: "var(--cz-text-secondary)", margin: 0, lineHeight: 1.6 }}>{m.texto}</p>
+        </div>);
+      })}
+    </div>)}
     {toast && <Toast {...toast} onClose={() => setToast(null)} />}
   </div>);
 };
@@ -308,6 +329,7 @@ export default function App() {
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [sugForm, setSugForm] = useState({ nombre: "", direccion: "", municipio: "Monterrey", descripcion: "", fotos: [], fotoFiles: null, telefono: "", email: "" });
   const [commentText, setCommentText] = useState("");
+  const [commentSent, setCommentSent] = useState(false);
   const [profileForm, setProfileForm] = useState({ email: "", foto: null, fotoFile: null });
   const [loading, setLoading] = useState(true);
   const fileRef = useRef(null);
@@ -322,13 +344,12 @@ export default function App() {
         const { data: prof } = await supabase.from("profiles").select("*").eq("id", session.user.id).single();
         if (prof) setProfile(prof);
       }
-      const [c, r, p, cm] = await Promise.all([
+      const [c, r, p] = await Promise.all([
         supabase.from("canchas").select("*").eq("estatus", "aprobada"),
         supabase.from("reviews").select("*"),
         supabase.from("profiles").select("*"),
-        supabase.from("comentarios").select("*").order("created_at", { ascending: false }).limit(50),
       ]);
-      setCanchas(c.data || []); setReviews(r.data || []); setProfiles(p.data || []); setComments(cm.data || []); setLoading(false);
+      setCanchas(c.data || []); setReviews(r.data || []); setProfiles(p.data || []); setLoading(false);
     }
     init();
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -432,9 +453,9 @@ export default function App() {
 
   const handleComment = async () => {
     if (!user) { setShowRegister(true); return; }
-    if (!commentText.trim()) { setToast({ message: "Escribe un comentario", type: "error" }); return; }
-    const { data, error } = await supabase.from("comentarios").insert({ user_id: user.id, texto: commentText.trim() }).select().single();
-    if (!error && data) { setComments(prev => [data, ...prev]); setCommentText(""); setToast({ message: "Comentario publicado", type: "success" }); }
+    if (!commentText.trim()) { setToast({ message: "Escribe un mensaje", type: "error" }); return; }
+    const { error } = await supabase.from("comentarios").insert({ user_id: user.id, texto: commentText.trim() });
+    if (!error) { setCommentText(""); setCommentSent(true); }
   };
 
   const handleUpdateProfile = async () => {
@@ -560,31 +581,32 @@ export default function App() {
       {filteredCanchas.length === 0 && (<div style={{ textAlign: "center", padding: "60px 20px" }}><p style={{ fontSize: 48, margin: "0 0 12px" }}>⚽</p><p style={{ fontSize: 16, fontWeight: 600, color: "var(--cz-text)", margin: "0 0 4px" }}>No se encontraron canchas</p><p style={{ fontSize: 14, color: "var(--cz-text-tertiary)" }}>Intenta con otros filtros o sugiere una nueva cancha</p></div>)}
     </main>
 
-    {/* COMMENTS SECTION */}
+    {/* CONTACT FORM (buzón privado) */}
     <section style={{ maxWidth: 1200, margin: "0 auto", padding: "0 20px 40px" }}>
       <div style={{ background: "var(--cz-bg)", borderRadius: 16, border: "1px solid var(--cz-border)", padding: "24px" }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 16px", color: "var(--cz-text)", display: "flex", alignItems: "center", gap: 8 }}><MessageIcon /> Comentarios de la comunidad</h2>
-        {user ? (<div style={{ marginBottom: 20 }}>
-          <textarea value={commentText} onChange={e => setCommentText(e.target.value)} placeholder="Escribe tu comentario..." style={{ width: "100%", padding: "12px 14px", border: "1.5px solid var(--cz-border)", borderRadius: 10, fontSize: 14, background: "var(--cz-bg-secondary)", color: "var(--cz-text)", outline: "none", boxSizing: "border-box", resize: "vertical", minHeight: 60, fontFamily: "inherit" }} />
-          <Button onClick={handleComment} style={{ marginTop: 8, fontSize: 13 }}>Publicar comentario</Button>
+        <h2 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 8px", color: "var(--cz-text)", display: "flex", alignItems: "center", gap: 8 }}><MessageIcon /> Contáctanos</h2>
+        <p style={{ fontSize: 14, color: "var(--cz-text-tertiary)", margin: "0 0 16px" }}>¿Tienes alguna sugerencia, queja o comentario? Escríbenos y te responderemos lo antes posible.</p>
+        {user ? (<div>
+          {commentSent ? (
+            <div style={{ textAlign: "center", padding: "20px 0" }}>
+              <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#D1FAE5", margin: "0 auto 12px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round"><path d="M20 6L9 17l-5-5"/></svg>
+              </div>
+              <p style={{ fontSize: 16, fontWeight: 600, color: "var(--cz-text)", margin: "0 0 4px" }}>Mensaje enviado</p>
+              <p style={{ fontSize: 14, color: "var(--cz-text-tertiary)", margin: 0 }}>Gracias por escribirnos. Lo revisaremos pronto.</p>
+              <button onClick={() => setCommentSent(false)} style={{ marginTop: 12, background: "none", border: "none", color: "#10B981", cursor: "pointer", fontSize: 14, fontWeight: 600 }}>Enviar otro mensaje</button>
+            </div>
+          ) : (
+            <div>
+              <textarea value={commentText} onChange={e => setCommentText(e.target.value)} placeholder="Escribe tu mensaje..." style={{ width: "100%", padding: "12px 14px", border: "1.5px solid var(--cz-border)", borderRadius: 10, fontSize: 14, background: "var(--cz-bg-secondary)", color: "var(--cz-text)", outline: "none", boxSizing: "border-box", resize: "vertical", minHeight: 80, fontFamily: "inherit" }} />
+              <Button onClick={handleComment} style={{ marginTop: 8, fontSize: 13 }}>Enviar mensaje</Button>
+            </div>
+          )}
         </div>) : (
-          <p style={{ fontSize: 14, color: "var(--cz-text-tertiary)", marginBottom: 16 }}>
-            <button onClick={() => setShowRegister(true)} style={{ background: "none", border: "none", color: "#10B981", cursor: "pointer", fontWeight: 600, fontSize: 14 }}>Inicia sesión</button> para dejar un comentario
+          <p style={{ fontSize: 14, color: "var(--cz-text-tertiary)" }}>
+            <button onClick={() => setShowRegister(true)} style={{ background: "none", border: "none", color: "#10B981", cursor: "pointer", fontWeight: 600, fontSize: 14 }}>Inicia sesión</button> para enviarnos un mensaje
           </p>
         )}
-        {comments.length === 0 && <p style={{ fontSize: 14, color: "var(--cz-text-tertiary)", textAlign: "center", padding: 20 }}>Sé el primero en comentar</p>}
-        {comments.map(c => {
-          const p = profiles.find(p => p.id === c.user_id);
-          return (<div key={c.id} style={{ padding: "12px 0", borderTop: "1px solid var(--cz-border)", display: "flex", gap: 12 }}>
-            <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#10B981", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
-              {p ? (p.nombre[0] + p.apellido[0]).toUpperCase() : "?"}
-            </div>
-            <div>
-              <p style={{ fontSize: 14, fontWeight: 600, margin: "0 0 2px", color: "var(--cz-text)" }}>{p ? `${p.nombre} ${p.apellido}` : "Usuario"}</p>
-              <p style={{ fontSize: 14, color: "var(--cz-text-secondary)", margin: 0, lineHeight: 1.5 }}>{c.texto}</p>
-            </div>
-          </div>);
-        })}
       </div>
     </section>
 
