@@ -549,7 +549,7 @@ export default function App() {
     {/* HERO */}
     <section style={{ background: dark ? "linear-gradient(180deg, #0F172A 0%, #064E3B 100%)" : "linear-gradient(180deg, #ECFDF5 0%, #D1FAE5 100%)", padding: "48px 20px 40px", textAlign: "center" }}>
       <h1 style={{ fontSize: 32, fontWeight: 800, margin: "0 0 8px", color: "var(--cz-text)", letterSpacing: -0.5 }}>Encuentra tu cancha ideal</h1>
-      <p style={{ fontSize: 16, color: "var(--cz-text-secondary)", margin: "0 0 28px" }}>El directorio #1 de canchas de fútbol en Monterrey y su zona metropolitana</p>
+      <p style={{ fontSize: 16, color: "var(--cz-text-secondary)", margin: "0 0 28px" }}>El directorio de canchas en Monterrey y su zona metropolitana</p>
       <div style={{ maxWidth: 800, margin: "0 auto", display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
         <div style={{ flex: "1 1 280px", position: "relative", maxWidth: 400 }}>
           <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--cz-text-tertiary)" }}><SearchIcon /></div>
