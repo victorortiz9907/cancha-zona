@@ -134,6 +134,8 @@ const AdminPanel = ({ onBack }) => {
   const [canchas, setCanchas] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedPhotos, setSelectedPhotos] = useState({});
+  const [showPhotoSelector, setShowPhotoSelector] = useState(null);
 
   useEffect(() => {
     async function load() {
@@ -152,15 +154,39 @@ const AdminPanel = ({ onBack }) => {
     load();
   }, []);
 
+  const togglePhoto = (sugId, photoUrl) => {
+    setSelectedPhotos(prev => {
+      const current = prev[sugId] || [];
+      if (current.includes(photoUrl)) {
+        return { ...prev, [sugId]: current.filter(p => p !== photoUrl) };
+      } else {
+        return { ...prev, [sugId]: [...current, photoUrl] };
+      }
+    });
+  };
+
+  const selectAllPhotos = (sugId, fotos) => {
+    setSelectedPhotos(prev => ({ ...prev, [sugId]: [...fotos] }));
+  };
+
+  const deselectAllPhotos = (sugId) => {
+    setSelectedPhotos(prev => ({ ...prev, [sugId]: [] }));
+  };
+
   const aprobar = async (sug) => {
+    const fotosToUse = selectedPhotos[sug.id] && selectedPhotos[sug.id].length > 0
+      ? selectedPhotos[sug.id]
+      : sug.fotos || [];
+
     const { error: insertErr } = await supabase.from("canchas").insert({
       nombre: sug.nombre, direccion: sug.direccion, descripcion: sug.descripcion,
       municipio: sug.municipio, lat: sug.lat || 25.68 + (Math.random() - 0.5) * 0.1,
-      lng: sug.lng || -100.31 + (Math.random() - 0.5) * 0.1, fotos: sug.fotos || [], estatus: "aprobada"
+      lng: sug.lng || -100.31 + (Math.random() - 0.5) * 0.1, fotos: fotosToUse, estatus: "aprobada"
     });
     if (!insertErr) {
       await supabase.from("sugerencias").update({ estatus: "aprobada" }).eq("id", sug.id);
       setSugerencias(prev => prev.map(s => s.id === sug.id ? { ...s, estatus: "aprobada" } : s));
+      setShowPhotoSelector(null);
     }
   };
 
@@ -185,12 +211,60 @@ const AdminPanel = ({ onBack }) => {
       {sugerencias.length === 0 && <p style={{ color: "var(--cz-text-tertiary)", textAlign: "center", padding: 40 }}>No hay sugerencias</p>}
       {sugerencias.map(s => (<div key={s.id} style={{ background: "var(--cz-bg)", border: "1px solid var(--cz-border)", borderRadius: 12, padding: 20, marginBottom: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
-          <div><h3 style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 600, color: "var(--cz-text)" }}>{s.nombre}</h3><p style={{ margin: 0, fontSize: 13, color: "var(--cz-text-secondary)" }}>{s.direccion}</p></div>
+          <div><h3 style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 600, color: "var(--cz-text)" }}>{s.nombre}</h3><p style={{ margin: 0, fontSize: 13, color: "var(--cz-text-secondary)" }}>{s.direccion}</p><p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--cz-text-tertiary)" }}>{s.municipio}</p></div>
           <span style={{ padding: "4px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600, background: s.estatus === "aprobada" ? "#D1FAE5" : s.estatus === "rechazada" ? "#FEE2E2" : "#FEF3C7", color: s.estatus === "aprobada" ? "#065F46" : s.estatus === "rechazada" ? "#991B1B" : "#92400E" }}>{s.estatus}</span>
         </div>
         <p style={{ fontSize: 14, color: "var(--cz-text-secondary)", margin: "12px 0" }}>{s.descripcion}</p>
-        {s.fotos && s.fotos.length > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>{s.fotos.map((f, i) => (<img key={i} src={f} alt="" style={{ width: 100, height: 70, objectFit: "cover", borderRadius: 8 }} onError={e => { e.target.style.display = "none"; }} />))}</div>}
-        {s.estatus === "pendiente" && (<div style={{ display: "flex", gap: 8 }}><Button onClick={() => aprobar(s)} style={{ fontSize: 13 }}>Aprobar</Button><Button variant="danger" onClick={() => rechazar(s.id)} style={{ fontSize: 13 }}>Rechazar</Button></div>)}
+
+        {s.fotos && s.fotos.length > 0 && (<div>
+          <p style={{ fontSize: 13, fontWeight: 600, color: "var(--cz-text)", margin: "0 0 8px" }}>
+            Fotos enviadas ({s.fotos.length}):
+            {s.estatus === "pendiente" && <span style={{ fontWeight: 400, color: "var(--cz-text-tertiary)" }}> — haz clic para elegir cuáles mostrar</span>}
+          </p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+            {s.fotos.map((f, i) => {
+              const isSelected = (selectedPhotos[s.id] || []).includes(f);
+              return (<div key={i} style={{ position: "relative", cursor: s.estatus === "pendiente" ? "pointer" : "default" }}
+                onClick={() => { if (s.estatus === "pendiente") togglePhoto(s.id, f); }}>
+                <img src={f} alt="" style={{
+                  width: 120, height: 85, objectFit: "cover", borderRadius: 8,
+                  border: isSelected ? "3px solid #10B981" : "3px solid transparent",
+                  opacity: s.estatus === "pendiente" && selectedPhotos[s.id] && selectedPhotos[s.id].length > 0 && !isSelected ? 0.4 : 1,
+                  transition: "all 0.2s"
+                }} onError={e => { e.target.style.display = "none"; }} />
+                {isSelected && (<div style={{
+                  position: "absolute", top: 4, right: 4, width: 22, height: 22, borderRadius: "50%",
+                  background: "#10B981", display: "flex", alignItems: "center", justifyContent: "center"
+                }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round"><path d="M20 6L9 17l-5-5"/></svg>
+                </div>)}
+              </div>);
+            })}
+          </div>
+          {s.estatus === "pendiente" && s.fotos.length > 1 && (<div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            <button onClick={() => selectAllPhotos(s.id, s.fotos)} style={{ fontSize: 12, padding: "4px 12px", borderRadius: 6, border: "1px solid var(--cz-border)", background: "var(--cz-bg-secondary)", color: "var(--cz-text-secondary)", cursor: "pointer", fontFamily: "inherit" }}>Seleccionar todas</button>
+            <button onClick={() => deselectAllPhotos(s.id)} style={{ fontSize: 12, padding: "4px 12px", borderRadius: 6, border: "1px solid var(--cz-border)", background: "var(--cz-bg-secondary)", color: "var(--cz-text-secondary)", cursor: "pointer", fontFamily: "inherit" }}>Deseleccionar todas</button>
+          </div>)}
+          {s.estatus === "pendiente" && selectedPhotos[s.id] && selectedPhotos[s.id].length > 0 && (
+            <p style={{ fontSize: 12, color: "#10B981", fontWeight: 600, margin: "0 0 8px" }}>
+              {selectedPhotos[s.id].length} foto{selectedPhotos[s.id].length !== 1 ? "s" : ""} seleccionada{selectedPhotos[s.id].length !== 1 ? "s" : ""} para mostrar
+            </p>
+          )}
+        </div>)}
+
+        {s.estatus === "pendiente" && (<div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => aprobar(s)} style={{
+            padding: "10px 20px", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer",
+            fontFamily: "inherit", background: "linear-gradient(135deg, #10B981, #059669)", color: "#fff",
+            border: "none", boxShadow: "0 4px 14px rgba(16,185,129,0.4)"
+          }}>
+            Aprobar {selectedPhotos[s.id] && selectedPhotos[s.id].length > 0 ? `con ${selectedPhotos[s.id].length} foto${selectedPhotos[s.id].length !== 1 ? "s" : ""}` : "con todas las fotos"}
+          </button>
+          <button onClick={() => rechazar(s.id)} style={{
+            padding: "10px 20px", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer",
+            fontFamily: "inherit", background: "#DC2626", color: "#fff", border: "none"
+          }}>Rechazar</button>
+        </div>)}
       </div>))}
     </div>)}
     {tab === "reviews" && (<div>
@@ -208,7 +282,6 @@ const AdminPanel = ({ onBack }) => {
     </div>)}
   </div>);
 };
-
 /* ============ MAIN APP ============ */
 export default function App() {
   const [dark, setDark] = useState(false);
